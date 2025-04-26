@@ -1,6 +1,6 @@
 cmake_minimum_required( VERSION 3.15 )
 
-project ( initialization_order_bugs LANGUAGES CXX )
+project ( memory_leaks LANGUAGES CXX )
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -9,8 +9,17 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 message( STATUS "CMAKE_PROJECT_NAME = ${CMAKE_PROJECT_NAME}" )
 message( STATUS "PROJECT_SOURCE_DIR = ${PROJECT_SOURCE_DIR}" )
 
+### asan
+option(ENABLE_ASAN "Enable AddressSanitizer" OFF)
+
+if(ENABLE_ASAN)
+    message(STATUS "AddressSanitizer enabled")
+    add_compile_options(-g -Wall -fsanitize=address -fno-omit-frame-pointer)
+    add_link_options(-fsanitize=address)
+endif()
+
 ### test script
-set(TEST_SCRIPTS memcheck.sh)
+set(TEST_SCRIPTS memcheck.sh suppr.txt)
 
 foreach(script ${TEST_SCRIPTS})
     add_custom_command(
@@ -26,28 +35,16 @@ endforeach()
 
 add_custom_target(copy_scripts ALL
     DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/memcheck.sh
+    DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/suppr.txt
 )
 
-add_executable( link_a_first a.cc b.cc )
-add_dependencies( link_a_first copy_scripts )
+### compile
+file(GLOB SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/*.cc)
 
-add_executable( link_b_first b.cc a.cc )
-add_dependencies( link_b_first copy_scripts )
+FOREACH (src_file ${SOURCES})
+    get_filename_component(exe_file ${src_file} NAME_WLE)
+    add_executable(${exe_file} ${src_file})
+    #target_link_libraries(${exe_file} PRIVATE asan)
+    add_dependencies(${exe_file} copy_scripts)
+ENDFOREACH()
 
-add_executable( link_a_first_asan a.cc b.cc )
-target_compile_options( link_a_first_asan PRIVATE
-    -g -Wall -fsanitize=address -fno-omit-frame-pointer
-)
-target_link_options( link_a_first_asan PRIVATE
-    -fsanitize=address
-)
-add_dependencies( link_a_first_asan copy_scripts )
-
-add_executable( link_b_first_asan b.cc a.cc )
-target_compile_options( link_b_first_asan PRIVATE
-    -g -Wall -fsanitize=address -fno-omit-frame-pointer
-)
-target_link_options( link_b_first_asan PRIVATE
-    -fsanitize=address
-)
-add_dependencies( link_b_first_asan copy_scripts )
